@@ -1,0 +1,139 @@
+loadtest:
+  # loadtest.name -- a name used for resources and settings in this load test
+  name: redis-load
+  # loadtest.locust_locustfile -- the name of the locustfile
+  locust_locustfile: redis_get_set.py
+  # loadtest.locust_locustfile_path -- the path of the locustfile (without trailing backslash)
+  locust_locustfile_path: "/mnt/locust"
+  # loadtest.locust_locustfile_configmap -- name of a configmap containing your locustfile (default uses the example locustfile)
+  locust_locustfile_configmap: "redis-load-locustfile"
+  pip_packages:
+    - redis
+    - argparse
+  environment_external_secret:
+    redis-load-test: 
+      - REDIS_URL
+  # loadtest.locustCmd -- The command to run Locust
+  locustCmd: "/usr/local/bin/locust"
+
+image:
+  repository: locustio/locust
+  tag: 2.4.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  annotations: {}
+  extraLabels: {}
+
+master:
+  # master.image -- A custom docker image including tag
+  image: ""
+  # master.logLevel -- Log level. Can be INFO or DEBUG
+  logLevel: INFO
+  # master.resources -- resources for the locust master
+  resources: {}
+    # limits:
+    #   cpu: 2000m
+    #   memory: 1024Mi
+    # requests:
+    #   cpu: 1000m
+    #   memory: 1024Mi
+  serviceAccountAnnotations: {}
+  # master.deploymentAnnotations -- Annotations on the deployment for master
+  deploymentAnnotations: {}
+  # master.envs_include_default -- Whether to include default environment variables
+  envs_include_default: true
+  # master.environment -- environment variables for the master
+  environment: {}
+  # master.args -- Any extra command args for the master
+  args: []
+  command:
+    - sh
+    - /config/docker-entrypoint.sh
+  strategy:
+    type: RollingUpdate
+  # master.pdb.enabled -- Whether to create a PodDisruptionBudget for the master pod
+  pdb:
+    enabled: false
+  # master.auth.enabled -- When enabled, UI basic auth will be enforced with the given username and password
+  auth:
+    enabled: false
+    username: ""
+    password: ""
+  # master.restartPolicy -- master pod's restartPolicy. Can be Always, OnFailure, or Never.
+  restartPolicy: Always
+
+worker:
+  # worker.image -- A custom docker image including tag
+  image: ""
+  # worker.logLevel -- Log level. Can be INFO or DEBUG
+  logLevel: INFO
+  replicas: 33
+  hpa:
+    enabled: true
+    minReplicas: 33
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 40
+  # worker.resources -- resources for the locust worker
+  resources: 
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+  serviceAccountAnnotations: {}
+  # worker.deploymentAnnotations -- Annotations on the deployment for workers
+  deploymentAnnotations: {}
+  # worker.envs_include_default -- Whether to include default environment variables
+  envs_include_default: true
+  # worker.environment -- environment variables for the workers
+  environment: {}
+  # worker.args -- Any extra command args for the workers
+  args: []
+  command:
+    - sh
+    - /config/docker-entrypoint.sh
+  strategy:
+    type: RollingUpdate
+  # worker.restartPolicy -- worker pod's restartPolicy. Can be Always, OnFailure, or Never.
+  restartPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  #  kubernetes.io/ingress.class: nginx
+  #  kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      pathType: ImplementationSpecific
+      path: /
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# extraConfigMaps -- Any extra configmaps to mount for the master and worker. Can be used for extra python packages
+extraConfigMaps: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# extraLabels -- Any extra labels to apply to all resources
+extraLabels: {}
