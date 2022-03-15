@@ -10,7 +10,7 @@ Author:- OpsTree Solutions
 from random import randint
 import os
 import time
-from locust import User, between, events, TaskSet, task, constant
+from locust import User, between, events, task
 import redis
 import gevent.monkey
 gevent.monkey.patch_all()

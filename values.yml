@@ -2,7 +2,7 @@ loadtest:
   # loadtest.name -- a name used for resources and settings in this load test
   name: redis-load
   # loadtest.locust_locustfile -- the name of the locustfile
-  locust_locustfile: redis_get_set.py
+  locust_locustfile: redis_agents.py
   # loadtest.locust_locustfile_path -- the path of the locustfile (without trailing backslash)
   locust_locustfile_path: "/mnt/locust"
   # loadtest.locust_locustfile_configmap -- name of a configmap containing your locustfile (default uses the example locustfile)
@@ -13,6 +13,7 @@ loadtest:
   environment_external_secret:
     redis-load-test: 
       - REDIS_URL
+      - AGENTS_COUNT
   # loadtest.locustCmd -- The command to run Locust
   locustCmd: "/usr/local/bin/locust"
 
@@ -69,10 +70,10 @@ worker:
   image: ""
   # worker.logLevel -- Log level. Can be INFO or DEBUG
   logLevel: INFO
-  replicas: 33
+  replicas: 40
   hpa:
     enabled: true
-    minReplicas: 33
+    minReplicas: 40
     maxReplicas: 100
     targetCPUUtilizationPercentage: 40
   # worker.resources -- resources for the locust worker
