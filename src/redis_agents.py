@@ -3,16 +3,26 @@
 from random import choices, randint, random
 import os
 import time
-import string
+import logging
 import uuid
 from locust import TaskSet, User, between, constant, events, task
+from locust.runners import MasterRunner
 import redis
 import gevent.monkey
 
 gevent.monkey.patch_all()
 
 configs = {"redis_url": os.getenv("REDIS_URL")}
+redisClient = None
 
+# Initialize redis Client once per worker( one worker is approx one Sysdig Collector)
+@events.init.add_listener
+def on_locust_init(environment, **kwargs):
+    global redisClient
+    if not isinstance(environment.runner, MasterRunner):
+        logging.info(f"Creating redis client {configs['redis_url']}")
+        redisClient = redis.Redis.from_url(url=configs["redis_url"], ssl_cert_reqs=None)
+        logging.info(f"info: {redisClient.info()}")
 
 class RedisClient(object):
     def __init__(
@@ -20,7 +30,8 @@ class RedisClient(object):
         environment,
         url=configs["redis_url"],
     ):
-        self.rc = redis.Redis.from_url(url=configs["redis_url"], ssl_cert_reqs=None)
+        global redisClient
+        self.rc = redisClient
         self.env = environment
 
     def get_set(self, key, value, command="GETSET"):
@@ -45,19 +56,20 @@ class RedisClient(object):
         self.env.events.request.fire(**request_meta)
         return request_meta["response"]
 
-class RedisLocust(User):
-    wait_time = between(5,10)
-    max_agents = int(os.getenv("AGENTS_COUNT"))
-    agents = []
+# A locust User is an active agent with it's id and it uses GETSET every ~5/10 secs
+class SysdigAgent(User):
+    wait_time = constant(10)
 
     def __init__(self, environment):
-        super(RedisLocust, self).__init__(environment)
+        super(SysdigAgent, self).__init__(environment)
         self.client = RedisClient(environment=self.environment)
 
-        for i in range(self.max_agents):
-            self.agents.append(str(uuid.uuid1()))
+        #Generate agent id
+        self.id=str(uuid.uuid1())
+
+        #for i in range(self.max_agents):
+        #    self.agents.append(str(uuid.uuid1()))
 
     @task
     def get_set(self):
-        for agent in self.agents:
-            self.client.get_set(agent, randint(1, 60))
+        self.client.get_set(self.id, randint(1,60))
