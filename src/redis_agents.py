@@ -34,31 +34,54 @@ class RedisClient(object):
         self.rc = redisClient
         self.env = environment
 
-    def get_set(self, key, value, command="GETSET"):
-        request_meta = {
-            "request_type": "GETSET",
-            "name": key,
-            "start_time": time.time(),
-            "response_length": 0,
-            "exception": None,
-            "context": None,
-            "response": None,
-        }
-        start_perf_counter = time.perf_counter()
-        try:
-            request_meta["response"] = str(self.rc.getset(key, value))
+    def __getattr_(self, name):
+        func = self.rc.__getattribute__(name)
+
+        def wrapper(*args, **kwargs):
+            request_meta = {
+                "request_type": "redis",
+                "name": name,
+                "start_time": time.time(),
+                "response_length": 0,
+                "exception": None,
+                "context": None,
+                "response": None,
+            }
+            start_perf_counter = time.perf_counter()
+            try:
+                request_meta["response"] = func(*args, **kwargs)
+            except Exception as e:
+                request_meta["exception"] = e
             request_meta["response_length"] = len(request_meta["response"])
-        except Exception as e:
-            request_meta["exception"] = e
-        request_meta["response_time"] = (
-            time.perf_counter() - start_perf_counter
-        ) * 1000
-        self.env.events.request.fire(**request_meta)
-        return request_meta["response"]
+            request_meta["response_time"] = (time.perf_counter() - start_perf_counter) * 1000
+            self.env.events.request.fire(**request_meta)
+            return request_meta["response"]
+            
+        return wrapper
+
+# WARNING this is no pythonic code, is a mere rewriting of java here 
+# https://github.com/draios/backend/blob/da703f35ebaf088f45fdfa5e580a74fc68ff25b9/sysdig-backend/sysdig-lib/redis/src/main/java/com/sysdig/commons/services/LockService.java#L94
+class Lock(object):
+    def __init__(self, uuid:str, expiryTimeInMillis:float) -> None:
+        self.uuid = uuid
+        self.expiryTime = expiryTimeInMillis
+
+    def fromString(text:str):
+        pass
+
+    def __str__(self) -> str:
+        return f"{self.uuid}:{self.expiryTime}" 
+    
+    def isExpired(self) -> bool:
+        return self.expiryTime < (time.time()*1000)
+
+    def isExpiredOrMine(self, otherUUID:str) -> bool:
+        return self.isExpired() or self.uuid == otherUUID
+
 
 # A locust User is an active agent with it's id and it uses GETSET every ~5/10 secs
 class SysdigAgent(User):
-    wait_time = constant(10)
+    wait_time = constant(1)
 
     def __init__(self, environment):
         super(SysdigAgent, self).__init__(environment)
@@ -67,9 +90,21 @@ class SysdigAgent(User):
         #Generate agent id
         self.id=str(uuid.uuid1())
 
-        #for i in range(self.max_agents):
-        #    self.agents.append(str(uuid.uuid1()))
+    @task(1)
+    def agentLock(self):
+        timeout = 10 * 1000 # 10 secs in ms
+        # https://github.com/draios/backend/blob/da703f35ebaf088f45fdfa5e580a74fc68ff25b9/sysdig-backend/sysdig-lib/redis/src/main/java/com/sysdig/commons/services/LockService.java#L186
+        setNXResult: bool = self.client.setnx(self.id,0)
+        if setNXResult:
+            return
 
-    @task
-    def get_set(self):
-        self.client.get_set(self.id, randint(1,60))
+        bounded = self.client.get(self.id)
+        if bounded is not None:
+            if isexpirdeormine(str(bounded)):
+                bounded = self.
+
+    @task(5)
+    def ping(self):
+        # This method is not found so __getattr_() will be called and 
+        # the wrapper() will call the ping() method on the redis client
+        self.client.ping()
