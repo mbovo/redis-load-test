@@ -67,7 +67,9 @@ class Lock(object):
         self.expiryTime = expiryTimeInMillis
 
     def fromString(text:str):
-        pass
+        split = text.split(":")
+        return Lock(split[0],split[1])
+
 
     def __str__(self) -> str:
         return f"{self.uuid}:{self.expiryTime}" 
@@ -92,16 +94,21 @@ class SysdigAgent(User):
 
     @task(1)
     def agentLock(self):
-        timeout = 10 * 1000 # 10 secs in ms
-        # https://github.com/draios/backend/blob/da703f35ebaf088f45fdfa5e580a74fc68ff25b9/sysdig-backend/sysdig-lib/redis/src/main/java/com/sysdig/commons/services/LockService.java#L186
-        setNXResult: bool = self.client.setnx(self.id,0)
+        lockExpiryInMillis: float = 10.0 * 1000.0 # 10 secs in ms for this test
+
+        newLock: Lock = Lock(self.id, (time.time()* 1000 )+ lockExpiryInMillis)
+
+        setNXResult: bool = self.client.setnx(self.id, str(newLock))
         if setNXResult:
+            # acquired
             return
 
-        bounded = self.client.get(self.id)
-        if bounded is not None:
-            if isexpirdeormine(str(bounded)):
-                bounded = self.
+        currentValue: str = str(self.client.get(self.id))
+        if currentValue is not None:
+            currentLock: Lock = Lock.fromString(currentValue)
+            if currentLock.isExpiredOrMine(self.id):
+                bounded = self.client.getset(str(newLock))
+                # other code is not required from a redis POV
 
     @task(5)
     def ping(self):
