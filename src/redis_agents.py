@@ -65,7 +65,6 @@ class RedisClient(object):
 
 # A locust User is an active agent with it's id and it uses GETSET every ~5/10 secs
 class SysdigAgent(User):
-    wait_time = constant(1)
 
     def __init__(self, environment):
         super(SysdigAgent, self).__init__(environment)
@@ -81,7 +80,6 @@ class SysdigAgent(User):
         self.client.get(self.id)
         if (randint(1, 100) % 2) == 0:
             self.client.getset(self.id, 0)
-        time.sleep(10)
 
     @task
     def ping(self):
