@@ -2,6 +2,7 @@
 ## pylint: disable = invalid-name, too-few-public-methods
 from random import choices, randint, random
 import os
+import string
 import time
 import logging
 import uuid
@@ -34,7 +35,7 @@ class RedisClient(object):
         self.rc = redisClient
         self.env = environment
 
-    def __getattr_(self, name):
+    def __getattr__(self, name):
         func = self.rc.__getattribute__(name)
 
         def wrapper(*args, **kwargs):
@@ -52,7 +53,10 @@ class RedisClient(object):
                 request_meta["response"] = func(*args, **kwargs)
             except Exception as e:
                 request_meta["exception"] = e
-            request_meta["response_length"] = len(request_meta["response"])
+            if type(request_meta["response"]) in [str,list,dict]:
+                request_meta["response_length"] = len(request_meta["response"])
+            else:
+                request_meta["response_length"] = 1
             request_meta["response_time"] = (time.perf_counter() - start_perf_counter) * 1000
             self.env.events.request.fire(**request_meta)
             return request_meta["response"]
@@ -66,20 +70,8 @@ class Lock(object):
         self.uuid = uuid
         self.expiryTime = expiryTimeInMillis
 
-    def fromString(text:str):
-        split = text.split(":")
-        return Lock(split[0],split[1])
-
-
-    def __str__(self) -> str:
-        return f"{self.uuid}:{self.expiryTime}" 
-    
     def isExpired(self) -> bool:
-        return self.expiryTime < (time.time()*1000)
-
-    def isExpiredOrMine(self, otherUUID:str) -> bool:
-        return self.isExpired() or self.uuid == otherUUID
-
+        return self.expiryTime < (time.time())
 
 # A locust User is an active agent with it's id and it uses GETSET every ~5/10 secs
 class SysdigAgent(User):
@@ -90,24 +82,25 @@ class SysdigAgent(User):
         self.client = RedisClient(environment=self.environment)
 
         #Generate agent id
-        self.id=str(uuid.uuid1())
+        self.id=str(uuid.uuid4())
 
     @task(1)
     def agentLock(self):
-        lockExpiryInMillis: float = 10.0 * 1000.0 # 10 secs in ms for this test
+        lockExpiry: float = 10.0
 
-        newLock: Lock = Lock(self.id, (time.time()* 1000 )+ lockExpiryInMillis)
+        newLock: Lock = Lock(self.id, (time.time()) + lockExpiry)
 
-        setNXResult: bool = self.client.setnx(self.id, str(newLock))
+        setNXResult: bool = self.client.setnx(self.id, newLock.expiryTime)
         if setNXResult:
             # acquired
+            logging.info("setNX is True")
             return
 
-        currentValue: str = str(self.client.get(self.id))
+        currentValue = float(str(self.client.get(self.id)).format("utf-8"))
         if currentValue is not None:
-            currentLock: Lock = Lock.fromString(currentValue)
-            if currentLock.isExpiredOrMine(self.id):
-                bounded = self.client.getset(str(newLock))
+            currentLock: Lock = Lock(self.id, currentValue)
+            if currentLock.isExpired(self.id):
+                bounded = self.client.getset(newLock.expiryTime)
                 # other code is not required from a redis POV
 
     @task(5)
