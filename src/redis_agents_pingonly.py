@@ -74,16 +74,6 @@ class SysdigAgent(User):
         self.id=str(uuid.uuid4())
 
     @task
-    def agentLock(self):
-        setNXResult: bool = bool(self.client.setnx(self.id, 0))
-        if setNXResult:
-            return
-        self.client.get(self.id)
-        if (randint(1, 100) % 2) == 0:
-            self.client.getset(self.id, 0)
-        time.sleep(10)
-
-    @task
     def ping(self):
         # This method is not found so __getattr_() will be called and 
         # the wrapper() will call the ping() method on the redis client

@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 ## pylint: disable = invalid-name, too-few-public-methods
-from random import randint
+from random import choices, randint, random
 import os
+import string
 import time
 import logging
 import uuid
-from locust import User, between, constant, events, task
+from locust import TaskSet, User, between, constant, events, task
 from locust.runners import MasterRunner
 import redis
 import gevent.monkey
@@ -65,7 +66,7 @@ class RedisClient(object):
 
 # A locust User is an active agent with it's id and it uses GETSET every ~5/10 secs
 class SysdigAgent(User):
-    wait_time = constant(1)
+    wait_time = constant(0)
 
     def __init__(self, environment):
         super(SysdigAgent, self).__init__(environment)
@@ -73,15 +74,17 @@ class SysdigAgent(User):
         #Generate agent id
         self.id=str(uuid.uuid4())
 
-    @task
-    def agentLock(self):
-        setNXResult: bool = bool(self.client.setnx(self.id, 0))
-        if setNXResult:
-            return
-        self.client.get(self.id)
-        if (randint(1, 100) % 2) == 0:
-            self.client.getset(self.id, 0)
-        time.sleep(10)
+    # @task
+    # def agentLock(self):
+    #     setNXResult: bool = bool(self.client.setnx(self.id, 0))
+    #     if setNXResult:
+    #         # acquired
+    #         logging.info("setNX is True")
+    #         return
+    #     self.client.get(self.id)
+    #     if randint(1, 100) % 3  == 0:
+    #         self.client.getset(self.id, 0)
+    #         logging.info("expired: using getset")
 
     @task
     def ping(self):
